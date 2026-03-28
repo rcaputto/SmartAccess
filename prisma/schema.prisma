@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum AccessCodeStatus {
+  PENDING
+  GENERATED
+  SENT
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+model User {
+  id         String     @id @default(cuid())
+  fullName   String
+  email      String     @unique
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  properties Property[]
+}
+
+model Property {
+  id         String    @id @default(cuid())
+  name       String
+  address    String?
+  city       String?
+  country    String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  units      Unit[]
+}
+
+model Unit {
+  id           String     @id @default(cuid())
+  name         String
+  description  String?
+  maxGuests    Int?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  propertyId   String
+  property     Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  bookings     Booking[]
+}
+
+model Guest {
+  id          String     @id @default(cuid())
+  fullName    String
+  email       String?
+  phone       String?
+  documentId  String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  bookings    Booking[]
+}
+
+model Booking {
+  id              String         @id @default(cuid())
+  reference       String?        @unique
+  checkInDate     DateTime
+  checkOutDate    DateTime
+  status          BookingStatus  @default(PENDING)
+  guestCount      Int?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  accessCode      AccessCode?
+
+  unitId          String
+  unit            Unit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  guestId         String
+  guest           Guest          @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([unitId])
+  @@index([guestId])
+  @@index([checkInDate, checkOutDate])
+}
+
+model AccessCode {
+  id           String           @id @default(cuid())
+  bookingId    String           @unique
+  provider     String?
+  code         String?
+  status       AccessCodeStatus @default(PENDING)
+  startsAt     DateTime
+  endsAt       DateTime
+  externalId   String?
+  lastSyncedAt DateTime?
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  booking      Booking          @relation(fields: [bookingId], references: [id])
+
+  @@index([status])
+  @@index([startsAt, endsAt])
+}
