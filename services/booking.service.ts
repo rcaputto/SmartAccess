@@ -733,3 +733,35 @@ async function syncAccessCodeWindowForBooking(params: {
     },
   });
 }
+
+
+export async function deleteBooking(bookingId: string) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      accessCode: true,
+    },
+  });
+
+  if (!booking) {
+    throw new Error("Booking not found");
+  }
+
+  if (booking.status !== "CANCELLED") {
+    throw new Error("Only cancelled bookings can be deleted");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (booking.accessCode) {
+      await tx.accessCode.delete({
+        where: { bookingId: booking.id },
+      });
+    }
+
+    await tx.booking.delete({
+      where: { id: booking.id },
+    });
+  });
+
+  return { success: true };
+}

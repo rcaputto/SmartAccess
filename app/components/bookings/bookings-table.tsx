@@ -59,10 +59,11 @@ type Booking = {
   } | null;
 };
 
-function formatDate(value: string) {
+function formatStayDate(value: string) {
   return new Intl.DateTimeFormat("es-ES", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   }).format(new Date(value));
 }
 
@@ -84,15 +85,11 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
               <th className="px-4 py-3 font-medium">Referencia</th>
               <th className="px-4 py-3 font-medium">Huésped</th>
               <th className="px-4 py-3 font-medium">Unidad</th>
-              <th className="px-4 py-3 font-medium">Propiedad</th>
-              <th className="px-4 py-3 font-medium">Fechas</th>
+              <th className="px-4 py-3 font-medium">Estadía</th>
               <th className="px-4 py-3 font-medium">Guests</th>
               <th className="px-4 py-3 font-medium">Booking</th>
-              <th className="px-4 py-3 font-medium">Access Code</th>
-              <th className="px-4 py-3 font-medium">PIN</th>
-              <th className="px-4 py-3 font-medium">Notas</th>
+              <th className="px-4 py-3 font-medium">Access</th>
               <th className="px-4 py-3 font-medium">Acciones</th>
-              <th className="px-4 py-3 font-medium">Detalle</th>
             </tr>
           </thead>
 
@@ -100,42 +97,47 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
             {bookings.map((booking) => (
               <tr key={booking.id} className="border-t align-top">
                 <td className="px-4 py-3 font-medium">
-                  {booking.reference ?? "Sin referencia"}
-                </td>
-
-                <td className="px-4 py-3">
-                  <div className="font-medium">{booking.guest.fullName}</div>
-                  <div className="text-xs text-gray-500">
-                    {booking.guest.email || "Sin email"}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {booking.guest.phone || "Sin teléfono"}
+                  <div className="max-w-[170px] break-words">
+                    {booking.reference ?? "Sin referencia"}
                   </div>
                 </td>
 
                 <td className="px-4 py-3">
-                  <div>{booking.unit.name}</div>
-                  <div className="text-xs text-gray-500">
-                    Capacidad: {booking.unit.maxGuests ?? "-"}
+                  <div className="max-w-[200px]">
+                    <div className="font-medium">{booking.guest.fullName}</div>
+                    <div className="truncate text-xs text-gray-500">
+                      {booking.guest.email || "Sin email"}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {booking.guest.phone || "Sin teléfono"}
+                    </div>
                   </div>
                 </td>
 
                 <td className="px-4 py-3">
-                  <div>{booking.unit.property.name}</div>
-                  <div className="text-xs text-gray-500">
-                    {booking.unit.property.city || "-"},{" "}
-                    {booking.unit.property.country || "-"}
+                  <div className="max-w-[200px]">
+                    <div className="font-medium">{booking.unit.name}</div>
+                    <div className="text-xs text-gray-500">
+                      {booking.unit.property.name}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {booking.unit.property.city || "-"},{" "}
+                      {booking.unit.property.country || "-"}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Capacidad: {booking.unit.maxGuests ?? "-"}
+                    </div>
                   </div>
                 </td>
 
                 <td className="px-4 py-3">
-                  <div>
-                    <span className="font-medium">In:</span>{" "}
-                    {formatDate(booking.checkInDate)}
-                  </div>
-                  <div className="text-gray-500">
-                    <span className="font-medium">Out:</span>{" "}
-                    {formatDate(booking.checkOutDate)}
+                  <div className="min-w-[130px]">
+                    <div className="font-medium">
+                      {formatStayDate(booking.checkInDate)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      → {formatStayDate(booking.checkOutDate)}
+                    </div>
                   </div>
                 </td>
 
@@ -149,47 +151,34 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
                   {booking.accessCode ? (
                     <div className="space-y-1">
                       <AccessCodeStatusBadge status={booking.accessCode.status} />
-                      <div className="text-xs text-gray-500">
-                        {booking.accessCode.provider ?? "Sin provider"}
-                      </div>
                     </div>
                   ) : (
                     <span className="text-xs text-gray-500">No creado</span>
                   )}
                 </td>
 
-                <td className="px-4 py-3 font-mono">
-                  {booking.accessCode?.code || "-"}
-                </td>
-
-                <td className="max-w-[220px] px-4 py-3 text-gray-600">
-                  <span className="line-clamp-2">
-                    {booking.notes || "Sin notas"}
-                  </span>
-                </td>
-
                 <td className="px-4 py-3">
-                  <BookingRowActions
-                    bookingId={booking.id}
-                    bookingStatus={booking.status}
-                    accessCode={
-                      booking.accessCode
-                        ? {
-                            id: booking.accessCode.id,
-                            status: booking.accessCode.status,
-                          }
-                        : null
-                    }
-                  />
-                </td>
+                  <div className="flex min-w-[140px] flex-col gap-3">
+                    <BookingRowActions
+                      bookingId={booking.id}
+                      bookingStatus={booking.status}
+                      accessCode={
+                        booking.accessCode
+                          ? {
+                              id: booking.accessCode.id,
+                              status: booking.accessCode.status,
+                            }
+                          : null
+                      }
+                    />
 
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/bookings/${booking.id}`}
-                    className="text-sm font-medium text-blue-600 hover:underline"
-                  >
-                    Ver detalle
-                  </Link>
+                    <Link
+                      href={`/bookings/${booking.id}`}
+                      className="text-sm font-medium text-blue-600 hover:underline"
+                    >
+                      Ver detalle
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -87,34 +87,93 @@ function generateExternalId(): string {
   return `lock_${Date.now()}_${Math.floor(Math.random() * 1000)}`
 }
 
+// export async function generateAccessCode(accessCodeId: string) {
+//   const accessCode = await prisma.accessCode.findUnique({
+//     where: { id: accessCodeId },
+//     include: { booking: true },
+//   })
+
+//   if (!accessCode) {
+//     throw new Error("AccessCode not found")
+//   }
+
+//   if (accessCode.status !== "PENDING") {
+//     throw new Error("AccessCode is not in PENDING state")
+//   }
+
+//   // 🔐 generar código
+//   const pin = generatePin()
+
+//   const updated = await prisma.accessCode.update({
+//     where: { id: accessCodeId },
+//     data: {
+//       code: pin,
+//       status: "GENERATED",
+//       provider: "demo-lock",
+//       externalId: generateExternalId(),
+//     },
+//   })
+
+//   return updated
+// }
+
+
 export async function generateAccessCode(accessCodeId: string) {
-  const accessCode = await prisma.accessCode.findUnique({
+  const existingAccessCode = await prisma.accessCode.findUnique({
     where: { id: accessCodeId },
     include: { booking: true },
-  })
+  });
 
-  if (!accessCode) {
-    throw new Error("AccessCode not found")
+  if (!existingAccessCode) {
+    throw new Error("Access code not found");
   }
 
-  if (accessCode.status !== "PENDING") {
-    throw new Error("AccessCode is not in PENDING state")
+  if (
+    existingAccessCode.booking.status === "CANCELLED" ||
+    existingAccessCode.booking.status === "CHECKED_OUT"
+  ) {
+    throw new Error("Cannot generate access code for this booking");
   }
 
-  // 🔐 generar código
-  const pin = generatePin()
+  const pin = generatePin();
 
-  const updated = await prisma.accessCode.update({
+  return prisma.accessCode.update({
     where: { id: accessCodeId },
     data: {
       code: pin,
       status: "GENERATED",
-      provider: "demo-lock",
-      externalId: generateExternalId(),
     },
-  })
+  });
+}
 
-  return updated
+export async function ensureAndGenerateAccessCodeForBooking(bookingId: string) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { accessCode: true },
+  });
+
+  if (!booking) {
+    throw new Error("Booking not found");
+  }
+
+  if (booking.status === "CANCELLED" || booking.status === "CHECKED_OUT") {
+    throw new Error("Cannot generate access code for this booking");
+  }
+
+  let accessCode = booking.accessCode;
+
+  if (!accessCode) {
+    accessCode = await prisma.accessCode.create({
+      data: {
+        bookingId: booking.id,
+        status: "PENDING",
+        startsAt: booking.checkInDate,
+        endsAt: booking.checkOutDate,
+      },
+    });
+  }
+
+  return generateAccessCode(accessCode.id);
 }
 
 export async function processPendingAccessCodes() {

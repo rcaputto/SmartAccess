@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import Button from "@/app/components/ui/button";
+import { useToast } from "@/app/components/ui/toast";
 
 type BookingStatus =
   | "PENDING"
@@ -34,12 +36,16 @@ export default function BookingRowActions({
   accessCode,
 }: BookingRowActionsProps) {
   const router = useRouter();
+  const { showToast } = useToast();
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
+  const [isOpen, setIsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const isBusy = isGenerating || isSending || isCancelling;
+  const isBusy = isGenerating || isSending || isCancelling || isDeleting;
 
   const canGenerate = useMemo(() => {
     if (bookingStatus === "CANCELLED" || bookingStatus === "CHECKED_OUT") {
@@ -47,10 +53,14 @@ export default function BookingRowActions({
     }
 
     if (!accessCode) {
-      return false;
+      return true;
     }
 
-    return accessCode.status === "PENDING" || accessCode.status === "FAILED";
+    return (
+      accessCode.status === "PENDING" ||
+      accessCode.status === "FAILED" ||
+      accessCode.status === "GENERATED"
+    );
   }, [bookingStatus, accessCode]);
 
   const canSend = useMemo(() => {
@@ -65,33 +75,89 @@ export default function BookingRowActions({
     return bookingStatus !== "CANCELLED" && bookingStatus !== "CHECKED_OUT";
   }, [bookingStatus]);
 
-  async function handleGenerate() {
-    if (!accessCode) return;
+  const canDelete = useMemo(() => {
+    return bookingStatus === "CANCELLED";
+  }, [bookingStatus]);
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!menuRef.current) return;
+
+      if (!menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  async function parseResponse(res: Response) {
+    const contentType = res.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      return res.json();
+    }
+
+    return res.text();
+  }
+
+  async function handleGenerate() {
     setIsGenerating(true);
+    setIsOpen(false);
 
     try {
-      const res = await fetch(
-        `/api/bookings/access-codes/${accessCode.id}/generate`,
-        {
-          method: "POST",
-        }
-      );
+      let res: Response;
 
-      const data = await res.json();
+      if (!accessCode) {
+        res = await fetch(`/api/bookings/${bookingId}/generate-access`, {
+          method: "POST",
+        });
+      } else {
+        res = await fetch(`/api/bookings/access-codes/${accessCode.id}/generate`, {
+          method: "POST",
+        });
+      }
+
+      const data = await parseResponse(res);
 
       if (!res.ok) {
-        throw new Error(data?.error || "No se pudo generar el access code");
+        throw new Error(
+          typeof data === "string"
+            ? data
+            : data?.error || "Could not generate access code"
+        );
       }
+
+      showToast({
+        type: "success",
+        title: "Access code ready",
+        message: "The booking access code was generated successfully.",
+      });
 
       router.refresh();
     } catch (error) {
       console.error("Generate access code error:", error);
-      alert(
-        error instanceof Error
-          ? error.message
-          : "No se pudo generar el access code"
-      );
+
+      showToast({
+        type: "error",
+        title: "Generate failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not generate access code.",
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -101,36 +167,52 @@ export default function BookingRowActions({
     if (!accessCode) return;
 
     setIsSending(true);
+    setIsOpen(false);
 
     try {
       const res = await fetch(`/api/bookings/access-codes/${accessCode.id}/send`, {
         method: "POST",
       });
 
-      const data = await res.json();
+      const data = await parseResponse(res);
 
       if (!res.ok) {
-        throw new Error(data?.error || "No se pudo enviar el access code");
+        throw new Error(
+          typeof data === "string"
+            ? data
+            : data?.error || "Could not send access code"
+        );
       }
+
+      showToast({
+        type: "success",
+        title: "Access code sent",
+        message: "The guest notification was sent successfully.",
+      });
 
       router.refresh();
     } catch (error) {
       console.error("Send access code error:", error);
-      alert(
-        error instanceof Error
-          ? error.message
-          : "No se pudo enviar el access code"
-      );
+
+      showToast({
+        type: "error",
+        title: "Send failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not send access code.",
+      });
     } finally {
       setIsSending(false);
     }
   }
 
   async function handleCancel() {
-    const confirmed = window.confirm("¿Seguro que quieres cancelar esta reserva?");
+    const confirmed = window.confirm("Are you sure you want to cancel this booking?");
     if (!confirmed) return;
 
     setIsCancelling(true);
+    setIsOpen(false);
 
     try {
       const res = await fetch(`/api/bookings/${bookingId}`, {
@@ -143,53 +225,147 @@ export default function BookingRowActions({
         }),
       });
 
-      const data = await res.json();
+      const data = await parseResponse(res);
 
       if (!res.ok) {
-        throw new Error(data?.error || "No se pudo cancelar la reserva");
+        throw new Error(
+          typeof data === "string"
+            ? data
+            : data?.error || "Could not cancel booking"
+        );
       }
+
+      showToast({
+        type: "success",
+        title: "Booking cancelled",
+        message: "The reservation was cancelled successfully.",
+      });
 
       router.refresh();
     } catch (error) {
       console.error("Cancel booking error:", error);
-      alert(
-        error instanceof Error
-          ? error.message
-          : "No se pudo cancelar la reserva"
-      );
+
+      showToast({
+        type: "error",
+        title: "Cancel failed",
+        message:
+          error instanceof Error ? error.message : "Could not cancel booking.",
+      });
     } finally {
       setIsCancelling(false);
     }
   }
 
+  async function handleDelete() {
+    const confirmed = window.confirm(
+      "This will permanently delete the booking. This action cannot be undone. Continue?"
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    setIsOpen(false);
+
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/delete`, {
+        method: "DELETE",
+      });
+
+      const data = await parseResponse(res);
+
+      if (!res.ok) {
+        console.error("Delete booking response error:", data);
+
+        throw new Error(
+          typeof data === "string"
+            ? data
+            : data?.error || "Could not delete booking"
+        );
+      }
+
+      showToast({
+        type: "success",
+        title: "Booking deleted",
+        message: "The reservation was permanently deleted.",
+      });
+
+      router.refresh();
+    } catch (error) {
+      console.error("Delete booking error:", error);
+
+      showToast({
+        type: "error",
+        title: "Delete failed",
+        message:
+          error instanceof Error ? error.message : "Could not delete booking.",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  const currentLoadingLabel = isGenerating
+    ? "Generating..."
+    : isSending
+    ? "Sending..."
+    : isCancelling
+    ? "Cancelling..."
+    : isDeleting
+    ? "Deleting..."
+    : null;
+
   return (
-    <div className="flex flex-col gap-2">
-      <button
+    <div className="relative inline-block" ref={menuRef}>
+      <Button
         type="button"
-        onClick={handleGenerate}
-        disabled={!canGenerate || isBusy}
-        className="rounded-lg border px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+        variant="secondary"
+        size="sm"
+        onClick={() => setIsOpen((prev) => !prev)}
+        disabled={isBusy}
+        loading={isBusy}
+        className="min-w-[110px] justify-between"
       >
-        {isGenerating ? "Generating..." : "Generate"}
-      </button>
+        {currentLoadingLabel ?? "Actions"}
+      </Button>
 
-      <button
-        type="button"
-        onClick={handleSend}
-        disabled={!canSend || isBusy}
-        className="rounded-lg border px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isSending ? "Sending..." : "Send"}
-      </button>
+      {isOpen && !isBusy ? (
+        <div className="absolute right-0 z-30 mt-2 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={!canGenerate}
+            className="block w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Generate
+          </button>
 
-      <button
-        type="button"
-        onClick={handleCancel}
-        disabled={!canCancel || isBusy}
-        className="rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isCancelling ? "Cancelling..." : "Cancel"}
-      </button>
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!canSend}
+            className="block w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Send
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={!canCancel}
+            className="block w-full px-4 py-2.5 text-left text-sm text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={!canDelete}
+            className="block w-full px-4 py-2.5 text-left text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Delete
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
