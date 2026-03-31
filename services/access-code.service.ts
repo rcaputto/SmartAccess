@@ -1,4 +1,97 @@
 import { prisma } from "@/lib/prisma";
+import { buildPreCheckinMessage, sendWhatsAppMessage } from "./notifications.service";
+
+export async function processPreCheckins() {
+  const now = new Date();
+  const next24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  const bookings = await prisma.booking.findMany({
+    where: {
+      status: "CONFIRMED",
+      checkInDate: {
+        lte: next24h,
+      },
+      OR: [
+        {
+          accessCode: {
+            is: null,
+          },
+        },
+        {
+          accessCode: {
+            is: {
+              status: "GENERATED",
+            },
+          },
+        },
+      ],
+    },
+    include: {
+      guest: true,
+      accessCode: true,
+      unit: {
+        include: {
+          property: true,
+        },
+      },
+    },
+  });
+
+  for (const booking of bookings) {
+    let accessCode = booking.accessCode;
+
+    // 1. SI NO EXISTE → CREAR
+    if (!accessCode) {
+      accessCode = await prisma.accessCode.create({
+        data: {
+          bookingId: booking.id,
+          code: generateRandomCode(),
+          status: "GENERATED",
+          startsAt: booking.checkInDate,
+          endsAt: booking.checkOutDate,
+        },
+      });
+    }
+
+    // 2. SI YA FUE ENVIADO → SKIP
+    if (accessCode.status === "SENT") {
+      continue;
+    }
+
+    // 3. BUILD MESSAGE
+    const message = buildPreCheckinMessage({
+      guestName: booking.guest.fullName,
+      propertyName: booking.unit.property.name,
+      propertyAddress: booking.unit.property.address || "",
+      unitName: booking.unit.name,
+      checkInDate: booking.checkInDate,
+      checkOutDate: booking.checkOutDate,
+      accessCode: accessCode.code || "",
+    });
+
+    let messageSent = false;
+
+// 4. SEND
+    if (booking.guest.phone) {
+      await sendWhatsAppMessage(booking.guest.phone, message);
+      messageSent = true;
+    }
+
+    // 5. UPDATE STATUS SOLO SI SE ENVIÓ
+    if (messageSent) {
+      await prisma.accessCode.update({
+        where: { id: accessCode.id },
+        data: {
+          status: "SENT",
+        },
+      });
+    }
+  }
+}
+
+function generateRandomCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 function buildMockDeliveryMessage(accessCode: {
   code: string | null;

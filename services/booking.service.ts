@@ -1,4 +1,3 @@
-import { BookingStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, AccessCodeStatus } from "@prisma/client";
 import { generateAccessCode } from "@/services/access-code.service"

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { login } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,8 +19,7 @@ export default function LoginPage() {
     // fake delay
     await new Promise((r) => setTimeout(r, 800));
 
-    // fake auth
-    localStorage.setItem("auth", "true");
+    login();
 
     router.push("/bookings");
   }

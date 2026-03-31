@@ -5,8 +5,10 @@ import {
   getAllBookings,
   isBookingServiceError,
 } from "@/services/booking.service";
+import { processPreCheckins } from "@/services/access-code.service";
 
 export async function GET(request: Request) {
+  await processPreCheckins();
   try {
     const { searchParams } = new URL(request.url);
 
