@@ -162,6 +162,8 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
                     <BookingRowActions
                       bookingId={booking.id}
                       bookingStatus={booking.status}
+                      checkInDate={booking.checkInDate}
+                      guestPhone={booking.guest.phone}
                       accessCode={
                         booking.accessCode
                           ? {

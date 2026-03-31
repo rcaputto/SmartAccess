@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { login } from "@/lib/auth";
+import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,18 +10,28 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
 
     setLoading(true);
+    setError(null);
 
-    // fake delay
-    await new Promise((r) => setTimeout(r, 800));
+    const res = await signIn("credentials", {
+      redirect: false,
+      email,
+      password,
+    });
 
-    login();
+    if (res?.error) {
+      setError("Credenciales inválidas");
+      setLoading(false);
+      return;
+    }
 
     router.push("/bookings");
+    router.refresh();
   }
 
   return (
@@ -62,6 +72,12 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+
+          {error ? (
+            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          ) : null}
 
           <button
             type="submit"

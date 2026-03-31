@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/ui/button";
 import { useToast } from "@/app/components/ui/toast";
+import { useSession } from "next-auth/react";
 
 type BookingStatus =
   | "PENDING"
@@ -24,6 +25,8 @@ type AccessCodeStatus =
 type BookingRowActionsProps = {
   bookingId: string;
   bookingStatus: BookingStatus;
+  checkInDate: string;
+  guestPhone: string | null;
   accessCode: {
     id: string;
     status: AccessCodeStatus;
@@ -33,10 +36,15 @@ type BookingRowActionsProps = {
 export default function BookingRowActions({
   bookingId,
   bookingStatus,
+  checkInDate,
+  guestPhone,
   accessCode,
 }: BookingRowActionsProps) {
   const router = useRouter();
   const { showToast } = useToast();
+  const { data: session } = useSession();
+  const role = (session as any)?.role as "OWNER" | "MANAGER" | undefined;
+  const canDeleteByRole = role === "OWNER";
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -47,8 +55,22 @@ export default function BookingRowActions({
 
   const isBusy = isGenerating || isSending || isCancelling || isDeleting;
 
+  const isWithinPrecheckinWindow = useMemo(() => {
+    const now = new Date();
+    const next24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    return new Date(checkInDate) <= next24h;
+  }, [checkInDate]);
+
+  const isConfirmed = bookingStatus === "CONFIRMED";
+
+  const manualActionsAllowed = isConfirmed && isWithinPrecheckinWindow;
+
   const canGenerate = useMemo(() => {
     if (bookingStatus === "CANCELLED" || bookingStatus === "CHECKED_OUT") {
+      return false;
+    }
+
+    if (!manualActionsAllowed) {
       return false;
     }
 
@@ -61,23 +83,31 @@ export default function BookingRowActions({
       accessCode.status === "FAILED" ||
       accessCode.status === "GENERATED"
     );
-  }, [bookingStatus, accessCode]);
+  }, [bookingStatus, accessCode, manualActionsAllowed]);
 
   const canSend = useMemo(() => {
     if (!accessCode) {
       return false;
     }
 
+    if (!manualActionsAllowed) {
+      return false;
+    }
+
+    if (!guestPhone) {
+      return false;
+    }
+
     return accessCode.status === "GENERATED";
-  }, [accessCode]);
+  }, [accessCode, manualActionsAllowed, guestPhone]);
 
   const canCancel = useMemo(() => {
     return bookingStatus !== "CANCELLED" && bookingStatus !== "CHECKED_OUT";
   }, [bookingStatus]);
 
   const canDelete = useMemo(() => {
-    return bookingStatus === "CANCELLED";
-  }, [bookingStatus]);
+    return canDeleteByRole && bookingStatus === "CANCELLED";
+  }, [bookingStatus, canDeleteByRole]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -118,6 +148,15 @@ export default function BookingRowActions({
     setIsOpen(false);
 
     try {
+      if (!manualActionsAllowed) {
+        showToast({
+          type: "error",
+          title: "Acción no disponible",
+          message: "Generate solo está disponible dentro de las 24h previas al check-in y con la reserva CONFIRMED.",
+        });
+        return;
+      }
+
       let res: Response;
 
       if (!accessCode) {
@@ -170,6 +209,24 @@ export default function BookingRowActions({
     setIsOpen(false);
 
     try {
+      if (!manualActionsAllowed) {
+        showToast({
+          type: "error",
+          title: "Acción no disponible",
+          message: "Send solo está disponible dentro de las 24h previas al check-in y con la reserva CONFIRMED.",
+        });
+        return;
+      }
+
+      if (!guestPhone) {
+        showToast({
+          type: "error",
+          title: "Falta teléfono",
+          message: "Agrega un teléfono al huésped para poder enviar por WhatsApp.",
+        });
+        return;
+      }
+
       const res = await fetch(`/api/bookings/access-codes/${accessCode.id}/send`, {
         method: "POST",
       });
@@ -364,6 +421,22 @@ export default function BookingRowActions({
           >
             Delete
           </button>
+
+          {!canDeleteByRole ? (
+            <div className="border-t bg-gray-50 px-4 py-2 text-xs text-gray-600">
+              Solo OWNER puede borrar reservas.
+            </div>
+          ) : null}
+
+          {!manualActionsAllowed ? (
+            <div className="border-t bg-gray-50 px-4 py-2 text-xs text-gray-600">
+              Generate/Send solo dentro de 24h del check-in y con CONFIRMED.
+            </div>
+          ) : !guestPhone ? (
+            <div className="border-t bg-gray-50 px-4 py-2 text-xs text-gray-600">
+              Falta teléfono del huésped para enviar.
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -1,103 +1,60 @@
-import { PrismaClient } from '@prisma/client'
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { prisma } from "../lib/prisma";
+import bcrypt from "bcryptjs";
 
-const adapter = new PrismaBetterSqlite3({
-  url: 'file:./dev.db',
-})
+async function seed() {
+  // 1) Default organization (single-tenant bootstrap)
+  const org =
+    (await prisma.organization.findFirst()) ??
+    (await prisma.organization.create({
+      data: { name: "Default Organization" },
+    }));
 
-const prisma = new PrismaClient({ adapter })
+  // 2) Ensure at least one user exists (admin)
+  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@smartaccess.local";
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin123";
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
 
-async function main() {
-  const user = await prisma.user.upsert({
-    where: { email: 'demo@smartaccess.app' },
-    update: {
-      fullName: 'Demo Owner',
-    },
-    create: {
-      fullName: 'Demo Owner',
-      email: 'demo@smartaccess.app',
-    },
-  })
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: adminEmail },
+  });
 
-  const existingProperty = await prisma.property.findFirst({
-    where: {
-      name: 'Benalmádena Suites',
-      userId: user.id,
-    },
-  })
+  const admin = existingAdmin
+    ? await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: {
+          fullName: existingAdmin.fullName || "Admin",
+          organizationId: existingAdmin.organizationId ?? org.id,
+          passwordHash: existingAdmin.passwordHash ?? passwordHash,
+          role: existingAdmin.role ?? "OWNER",
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          fullName: "Admin",
+          email: adminEmail,
+          passwordHash,
+          role: "OWNER",
+          organizationId: org.id,
+        },
+      });
 
-  const property =
-    existingProperty ??
-    (await prisma.property.create({
-      data: {
-        name: 'Benalmádena Suites',
-        address: 'Av. del Sol 123',
-        city: 'Benalmádena',
-        country: 'España',
-        userId: user.id,
-      },
-    }))
+  // 3) Backfill organizationId across existing data
+  // NOTE: organizationId/passwordHash are NOT NULL after Sprint 7 hardening,
+  // so these updateMany calls are only useful during early bootstrap.
 
-  const existingUnit = await prisma.unit.findFirst({
-    where: {
-      name: 'Apartamento 1A',
-      propertyId: property.id,
-    },
-  })
-
-  const unit =
-    existingUnit ??
-    (await prisma.unit.create({
-      data: {
-        name: 'Apartamento 1A',
-        description: 'Estudio con acceso inteligente',
-        maxGuests: 2,
-        propertyId: property.id,
-      },
-    }))
-
-  const existingGuest = await prisma.guest.findFirst({
-    where: { email: 'juan@example.com' },
-  })
-
-  const guest =
-    existingGuest ??
-    (await prisma.guest.create({
-      data: {
-        fullName: 'Juan Pérez',
-        email: 'juan@example.com',
-        phone: '+34600111222',
-        documentId: 'X1234567A',
-      },
-    }))
-
-  const existingBooking = await prisma.booking.findUnique({
-    where: { reference: 'BK-1001' },
-  })
-
-  if (!existingBooking) {
-    await prisma.booking.create({
-      data: {
-        reference: 'BK-1001',
-        checkInDate: new Date('2026-04-10T15:00:00.000Z'),
-        checkOutDate: new Date('2026-04-15T11:00:00.000Z'),
-        status: 'CONFIRMED',
-        guestCount: 2,
-        notes: 'Llegada estimada 18:00',
-        unitId: unit.id,
-        guestId: guest.id,
-      },
-    })
-  }
-
-  console.log('Seed ejecutado correctamente')
+  console.info("[seed] Done", {
+    organizationId: org.id,
+    adminEmail,
+    adminUserId: admin.id,
+  });
 }
 
-main()
+seed()
   .catch((e) => {
-    console.error(e)
-    process.exit(1)
+    console.error("[seed] Failed", e);
+    process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect()
-  })
+    await prisma.$disconnect();
+  });
+

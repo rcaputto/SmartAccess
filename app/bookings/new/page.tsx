@@ -1,4 +1,5 @@
 import BookingForm from "../../components/bookings/booking-form";
+import { serverFetchJson } from "@/lib/server/server-fetch";
 
 type UnitOption = {
   id: string;
@@ -13,15 +14,7 @@ type UnitOption = {
 };
 
 async function getUnits(): Promise<UnitOption[]> {
-  const res = await fetch("http://localhost:3000/api/units", {
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error("No se pudieron cargar las unidades");
-  }
-
-  return res.json();
+  return serverFetchJson<UnitOption[]>("/api/units");
 }
 
 export default async function NewBookingPage() {

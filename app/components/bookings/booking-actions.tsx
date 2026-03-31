@@ -22,6 +22,8 @@ type AccessCodeStatus =
 type BookingActionsProps = {
   bookingId: string;
   bookingStatus: BookingStatus;
+  checkInDate: string;
+  guestPhone: string | null;
   accessCode: {
     id: string;
     status: AccessCodeStatus;
@@ -31,6 +33,8 @@ type BookingActionsProps = {
 export default function BookingActions({
   bookingId,
   bookingStatus,
+  checkInDate,
+  guestPhone,
   accessCode,
 }: BookingActionsProps) {
   const router = useRouter();
@@ -41,6 +45,15 @@ export default function BookingActions({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const isWithinPrecheckinWindow = useMemo(() => {
+    const now = new Date();
+    const next24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    return new Date(checkInDate) <= next24h;
+  }, [checkInDate]);
+
+  const manualActionsAllowed =
+    bookingStatus === "CONFIRMED" && isWithinPrecheckinWindow;
+
   const canGenerate = useMemo(() => {
     if (bookingStatus === "CANCELLED" || bookingStatus === "CHECKED_OUT") {
       return false;
@@ -50,16 +63,28 @@ export default function BookingActions({
       return false;
     }
 
+    if (!manualActionsAllowed) {
+      return false;
+    }
+
     return accessCode.status === "PENDING" || accessCode.status === "FAILED";
-  }, [bookingStatus, accessCode]);
+  }, [bookingStatus, accessCode, manualActionsAllowed]);
 
   const canSend = useMemo(() => {
     if (!accessCode) {
       return false;
     }
 
+    if (!manualActionsAllowed) {
+      return false;
+    }
+
+    if (!guestPhone) {
+      return false;
+    }
+
     return accessCode.status === "GENERATED";
-  }, [accessCode]);
+  }, [accessCode, manualActionsAllowed, guestPhone]);
 
   const canCancel = useMemo(() => {
     return bookingStatus !== "CANCELLED" && bookingStatus !== "CHECKED_OUT";
@@ -73,6 +98,12 @@ export default function BookingActions({
     setMessage(null);
 
     try {
+      if (!manualActionsAllowed) {
+        throw new Error(
+          "Generate solo está disponible dentro de las 24h previas al check-in y con la reserva CONFIRMED."
+        );
+      }
+
       const res = await fetch(
         `/api/bookings/access-codes/${accessCode.id}/generate`,
         {
@@ -103,6 +134,16 @@ export default function BookingActions({
     setMessage(null);
 
     try {
+      if (!manualActionsAllowed) {
+        throw new Error(
+          "Send solo está disponible dentro de las 24h previas al check-in y con la reserva CONFIRMED."
+        );
+      }
+
+      if (!guestPhone) {
+        throw new Error("Falta el teléfono del huésped para enviar por WhatsApp.");
+      }
+
       const res = await fetch(`/api/bookings/access-codes/${accessCode.id}/send`, {
         method: "POST",
       });

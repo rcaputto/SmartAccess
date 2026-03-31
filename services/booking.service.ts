@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, AccessCodeStatus } from "@prisma/client";
-import { generateAccessCode } from "@/services/access-code.service"
+import { writeAuditLog } from "./audit.service";
 
 export type GetAllBookingsFilters = {
   status?: BookingStatus;
@@ -123,12 +123,14 @@ async function findOverlappingBooking(params: {
   unitId: string;
   checkInDate: Date;
   checkOutDate: Date;
+  organizationId?: string;
   excludeBookingId?: string;
 }) {
-  const { unitId, checkInDate, checkOutDate, excludeBookingId } = params;
+  const { unitId, checkInDate, checkOutDate, excludeBookingId, organizationId } = params;
 
   return prisma.booking.findFirst({
     where: {
+      ...(organizationId ? { organizationId } : {}),
       unitId,
       status: {
         not: BookingStatus.CANCELLED,
@@ -154,7 +156,11 @@ async function findOverlappingBooking(params: {
   });
 }
 
-export async function getAllBookings(filters: GetAllBookingsFilters = {}) {
+export async function getAllBookings(params: {
+  organizationId: string;
+  filters?: GetAllBookingsFilters;
+}) {
+  const { organizationId, filters = {} } = params;
   const { status, unitId, from, to } = filters;
 
   let parsedFrom: Date | undefined;
@@ -181,6 +187,7 @@ export async function getAllBookings(filters: GetAllBookingsFilters = {}) {
 
   return prisma.booking.findMany({
     where: {
+      organizationId,
       ...(status ? { status } : {}),
       ...(unitId ? { unitId } : {}),
       ...(parsedFrom && parsedTo
@@ -221,9 +228,10 @@ export async function getAllBookings(filters: GetAllBookingsFilters = {}) {
   });
 }
 
-export async function getBookingById(id: string) {
+export async function getBookingById(params: { organizationId: string; id: string }) {
+  const { organizationId, id } = params;
   const booking = await prisma.booking.findUnique({
-    where: { id },
+    where: { id, organizationId },
     include: {
   unit: {
     include: {
@@ -232,6 +240,11 @@ export async function getBookingById(id: string) {
   },
   guest: true,
   accessCode: true,
+  notificationDeliveries: {
+    orderBy: {
+      createdAt: "desc",
+    },
+  },
 },
   });
 
@@ -239,10 +252,29 @@ export async function getBookingById(id: string) {
     throw new BookingServiceError("Reserva no encontrada", 404);
   }
 
-  return booking;
+  const auditLogs = await prisma.auditLog.findMany({
+    where: {
+      organizationId,
+      entityType: "BOOKING",
+      entityId: booking.id,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 50,
+  });
+
+  return {
+    ...booking,
+    auditLogs,
+  };
 }
 
-export async function createBooking(input: CreateBookingInput) {
+export async function createBooking(params: {
+  organizationId: string;
+  input: CreateBookingInput;
+}) {
+  const { organizationId, input } = params;
   const { unitId, guest, checkInDate, checkOutDate, guestCount, notes } = input;
 
   if (!unitId || !guest?.fullName || !checkInDate || !checkOutDate) {
@@ -258,7 +290,7 @@ export async function createBooking(input: CreateBookingInput) {
   validateDateRange(parsedCheckInDate, parsedCheckOutDate);
 
   const unit = await prisma.unit.findUnique({
-    where: { id: unitId },
+    where: { id: unitId, organizationId },
     select: {
       id: true,
       maxGuests: true,
@@ -286,6 +318,7 @@ export async function createBooking(input: CreateBookingInput) {
   }
 
   const overlappingBooking = await findOverlappingBooking({
+    organizationId,
     unitId,
     checkInDate: parsedCheckInDate,
     checkOutDate: parsedCheckOutDate,
@@ -307,6 +340,7 @@ export async function createBooking(input: CreateBookingInput) {
   if (guest.email) {
     guestRecord = await prisma.guest.findFirst({
       where: {
+        organizationId,
         email: guest.email,
       },
     });
@@ -314,6 +348,7 @@ export async function createBooking(input: CreateBookingInput) {
     if (!guestRecord) {
       guestRecord = await prisma.guest.create({
         data: {
+          organizationId,
           fullName: guest.fullName,
           email: guest.email,
           phone: guest.phone,
@@ -324,6 +359,7 @@ export async function createBooking(input: CreateBookingInput) {
   } else {
     guestRecord = await prisma.guest.create({
       data: {
+        organizationId,
         fullName: guest.fullName,
         email: guest.email,
         phone: guest.phone,
@@ -334,25 +370,182 @@ export async function createBooking(input: CreateBookingInput) {
 
   const reference = await generateUniqueBookingReference();
 
-  const booking = await prisma.booking.create({
-    data: {
-      reference,
-      unitId,
-      guestId: guestRecord.id,
-      checkInDate: parsedCheckInDate,
-      checkOutDate: parsedCheckOutDate,
-      status: BookingStatus.CONFIRMED,
-      guestCount,
-      notes,
+ const booking = await prisma.booking.create({
+  data: {
+    organizationId,
+    reference,
+    unitId,
+    guestId: guestRecord.id,
+    checkInDate: parsedCheckInDate,
+    checkOutDate: parsedCheckOutDate,
+    status: BookingStatus.CONFIRMED,
+    guestCount,
+    notes,
+  },
+});
+
+return prisma.booking.findUniqueOrThrow({
+  where: { id: booking.id },
+  include: {
+    unit: {
+      include: {
+        property: true,
+      },
+    },
+    guest: true,
+    accessCode: true,
+  },
+});
+}
+
+export async function updateBooking(params: {
+  organizationId: string;
+  id: string;
+  input: UpdateBookingInput;
+}) {
+  const { organizationId, id, input } = params;
+  const booking = await prisma.booking.findUnique({
+    where: { id, organizationId },
+    include: {
+      unit: true,
+      accessCode: true,
     },
   });
 
-  if (booking.status === BookingStatus.CONFIRMED) {
-    await ensureAccessCodeForBooking(booking.id);
+  if (!booking) {
+    throw new BookingServiceError("Reserva no encontrada", 404);
   }
 
-  return prisma.booking.findUniqueOrThrow({
-    where: { id: booking.id },
+  const hasCheckInUpdate = Object.prototype.hasOwnProperty.call(
+    input,
+    "checkInDate"
+  );
+  const hasCheckOutUpdate = Object.prototype.hasOwnProperty.call(
+    input,
+    "checkOutDate"
+  );
+  const hasStatusUpdate = Object.prototype.hasOwnProperty.call(input, "status");
+  const hasGuestCountUpdate = Object.prototype.hasOwnProperty.call(
+    input,
+    "guestCount"
+  );
+  const hasNotesUpdate = Object.prototype.hasOwnProperty.call(input, "notes");
+
+  if (
+    !hasCheckInUpdate &&
+    !hasCheckOutUpdate &&
+    !hasStatusUpdate &&
+    !hasGuestCountUpdate &&
+    !hasNotesUpdate
+  ) {
+    throw new BookingServiceError("No se enviaron campos para actualizar", 400);
+  }
+
+  if (
+    booking.status === BookingStatus.CHECKED_OUT ||
+    booking.status === BookingStatus.CANCELLED
+  ) {
+    throw new BookingServiceError(
+      "No se puede modificar una reserva finalizada o cancelada",
+      400
+    );
+  }
+
+  let nextCheckInDate = booking.checkInDate;
+  let nextCheckOutDate = booking.checkOutDate;
+
+  if (hasCheckInUpdate) {
+    if (!input.checkInDate) {
+      throw new BookingServiceError("checkInDate no puede estar vacío", 400);
+    }
+    nextCheckInDate = parseDate(input.checkInDate, "checkInDate");
+  }
+
+  if (hasCheckOutUpdate) {
+    if (!input.checkOutDate) {
+      throw new BookingServiceError("checkOutDate no puede estar vacío", 400);
+    }
+    nextCheckOutDate = parseDate(input.checkOutDate, "checkOutDate");
+  }
+
+  validateDateRange(nextCheckInDate, nextCheckOutDate);
+
+  if (hasGuestCountUpdate) {
+    if (
+      typeof input.guestCount !== "number" ||
+      input.guestCount <= 0 ||
+      !Number.isInteger(input.guestCount)
+    ) {
+      throw new BookingServiceError(
+        "guestCount debe ser un número entero mayor que 0",
+        400
+      );
+    }
+
+    if (booking.unit.maxGuests && input.guestCount > booking.unit.maxGuests) {
+      throw new BookingServiceError(
+        "La cantidad de huéspedes excede la capacidad de la unidad",
+        400
+      );
+    }
+  }
+
+  let nextStatus: BookingStatus = booking.status;
+
+  if (hasStatusUpdate) {
+    if (!input.status) {
+      throw new BookingServiceError("status no puede estar vacío", 400);
+    }
+
+    const validStatuses = Object.values(BookingStatus);
+    if (!validStatuses.includes(input.status)) {
+      throw new BookingServiceError("Estado inválido", 400);
+    }
+
+    if (!isValidStatusTransition(booking.status, input.status)) {
+      throw new BookingServiceError(
+        `Transición de estado inválida: ${booking.status} -> ${input.status}`,
+        400
+      );
+    }
+
+    nextStatus = input.status;
+  }
+
+  const datesChanged =
+    nextCheckInDate.getTime() !== booking.checkInDate.getTime() ||
+    nextCheckOutDate.getTime() !== booking.checkOutDate.getTime();
+
+  if (datesChanged && nextStatus !== BookingStatus.CANCELLED) {
+    const overlappingBooking = await findOverlappingBooking({
+      organizationId,
+      unitId: booking.unitId,
+      checkInDate: nextCheckInDate,
+      checkOutDate: nextCheckOutDate,
+      excludeBookingId: booking.id,
+    });
+
+    if (overlappingBooking) {
+      throw new BookingServiceError(
+        "Ya existe una reserva solapada para esa unidad en ese período",
+        409,
+        {
+          conflictingBookingId: overlappingBooking.id,
+          conflictingBookingReference: overlappingBooking.reference,
+        }
+      );
+    }
+  }
+
+  const updatedBooking = await prisma.booking.update({
+    where: { id: booking.id, organizationId },
+    data: {
+      checkInDate: nextCheckInDate,
+      checkOutDate: nextCheckOutDate,
+      status: nextStatus,
+      ...(hasGuestCountUpdate ? { guestCount: input.guestCount } : {}),
+      ...(hasNotesUpdate ? { notes: input.notes ?? null } : {}),
+    },
     include: {
       unit: {
         include: {
@@ -363,232 +556,24 @@ export async function createBooking(input: CreateBookingInput) {
       accessCode: true,
     },
   });
-}
 
-// export async function updateBooking(id: string, input: UpdateBookingInput) {
-//   const booking = await prisma.booking.findUnique({
-//     where: { id },
-//     include: {
-//       unit: true,
-//     },
-//   });
-
-//   if (!booking) {
-//     throw new BookingServiceError("Reserva no encontrada", 404);
-//   }
-
-//   const hasCheckInUpdate = Object.prototype.hasOwnProperty.call(
-//     input,
-//     "checkInDate"
-//   );
-//   const hasCheckOutUpdate = Object.prototype.hasOwnProperty.call(
-//     input,
-//     "checkOutDate"
-//   );
-//   const hasStatusUpdate = Object.prototype.hasOwnProperty.call(input, "status");
-//   const hasGuestCountUpdate = Object.prototype.hasOwnProperty.call(
-//     input,
-//     "guestCount"
-//   );
-//   const hasNotesUpdate = Object.prototype.hasOwnProperty.call(input, "notes");
-
-//   if (
-//     !hasCheckInUpdate &&
-//     !hasCheckOutUpdate &&
-//     !hasStatusUpdate &&
-//     !hasGuestCountUpdate &&
-//     !hasNotesUpdate
-//   ) {
-//     throw new BookingServiceError(
-//       "No se enviaron campos para actualizar",
-//       400
-//     );
-//   }
-
-//   if (
-//     booking.status === BookingStatus.CHECKED_OUT ||
-//     booking.status === BookingStatus.CANCELLED
-//   ) {
-//     throw new BookingServiceError(
-//       "No se puede modificar una reserva finalizada o cancelada",
-//       400
-//     );
-//   }
-
-//   let nextCheckInDate = booking.checkInDate;
-//   let nextCheckOutDate = booking.checkOutDate;
-
-//   if (hasCheckInUpdate) {
-//     if (!input.checkInDate) {
-//       throw new BookingServiceError("checkInDate no puede estar vacío", 400);
-//     }
-
-//     nextCheckInDate = parseDate(input.checkInDate, "checkInDate");
-//   }
-
-//   if (hasCheckOutUpdate) {
-//     if (!input.checkOutDate) {
-//       throw new BookingServiceError("checkOutDate no puede estar vacío", 400);
-//     }
-
-//     nextCheckOutDate = parseDate(input.checkOutDate, "checkOutDate");
-//   }
-
-//   validateDateRange(nextCheckInDate, nextCheckOutDate);
-
-//   if (hasGuestCountUpdate) {
-//     if (
-//       typeof input.guestCount !== "number" ||
-//       input.guestCount <= 0 ||
-//       !Number.isInteger(input.guestCount)
-//     ) {
-//       throw new BookingServiceError(
-//         "guestCount debe ser un número entero mayor que 0",
-//         400
-//       );
-//     }
-
-//     if (booking.unit.maxGuests && input.guestCount > booking.unit.maxGuests) {
-//       throw new BookingServiceError(
-//         "La cantidad de huéspedes excede la capacidad de la unidad",
-//         400
-//       );
-//     }
-//   }
-
-//   let nextStatus = booking.status;
-
-//   if (hasStatusUpdate) {
-//     if (!input.status) {
-//       throw new BookingServiceError("status no puede estar vacío", 400);
-//     }
-
-//     const validStatuses = Object.values(BookingStatus);
-
-//     if (!validStatuses.includes(input.status)) {
-//       throw new BookingServiceError("Estado inválido", 400);
-//     }
-
-//     if (!isValidStatusTransition(booking.status, input.status)) {
-//       throw new BookingServiceError(
-//         `Transición de estado inválida: ${booking.status} -> ${input.status}`,
-//         400
-//       );
-//     }
-
-//     nextStatus = input.status;
-//   }
-
-//   const datesChanged =
-//     nextCheckInDate.getTime() !== booking.checkInDate.getTime() ||
-//     nextCheckOutDate.getTime() !== booking.checkOutDate.getTime();
-
-//   if (datesChanged && nextStatus !== BookingStatus.CANCELLED) {
-//     const overlappingBooking = await findOverlappingBooking({
-//       unitId: booking.unitId,
-//       checkInDate: nextCheckInDate,
-//       checkOutDate: nextCheckOutDate,
-//       excludeBookingId: booking.id,
-//     });
-
-//     if (overlappingBooking) {
-//       throw new BookingServiceError(
-//         "Ya existe una reserva solapada para esa unidad en ese período",
-//         409,
-//         {
-//           conflictingBookingId: overlappingBooking.id,
-//           conflictingBookingReference: overlappingBooking.reference,
-//         }
-//       );
-//     }
-//   }
-
-//   const updatedBooking = await prisma.booking.update({
-//   where: { id: booking.id },
-//   data: {
-//     checkInDate: nextCheckInDate,
-//     checkOutDate: nextCheckOutDate,
-//     status: nextStatus,
-//     ...(hasGuestCountUpdate ? { guestCount: input.guestCount } : {}),
-//     ...(hasNotesUpdate ? { notes: input.notes ?? null } : {}),
-//   },
-//   include: {
-//     unit: {
-//       include: {
-//         property: true,
-//       },
-//     },
-//     guest: true,
-//     accessCode: true,
-//   },
-// });
-
-// if (updatedBooking.status === BookingStatus.CONFIRMED) {
-//   await ensureAccessCodeForBooking({
-//     bookingId: updatedBooking.id,
-//     checkInDate: updatedBooking.checkInDate,
-//     checkOutDate: updatedBooking.checkOutDate,
-//   });
-
-//   await syncAccessCodeWindowForBooking({
-//     bookingId: updatedBooking.id,
-//     checkInDate: updatedBooking.checkInDate,
-//     checkOutDate: updatedBooking.checkOutDate,
-//   });
-// }
-
-// if (updatedBooking.status === BookingStatus.CANCELLED) {
-//   await cancelAccessCodeForBooking(updatedBooking.id);
-// }
-
-// return prisma.booking.findUniqueOrThrow({
-//   where: { id: updatedBooking.id },
-//   include: {
-//     unit: {
-//       include: {
-//         property: true,
-//       },
-//     },
-//     guest: true,
-//     accessCode: true,
-//   },
-// });
-// }
-
-export async function updateBooking(id: string, data: UpdateBookingInput) {
-  const existingBooking = await prisma.booking.findUnique({
-    where: { id },
-    include: { accessCode: true },
-  });
-
-  if (!existingBooking) {
-    throw new BookingServiceError("Booking not found", 404);
+  if (updatedBooking.status !== booking.status) {
+    await writeAuditLog({
+      organizationId,
+      entityType: "BOOKING",
+      entityId: updatedBooking.id,
+      action: "BOOKING_STATUS_CHANGED",
+      actorType: "MANUAL",
+      details: {
+        from: booking.status,
+        to: updatedBooking.status,
+      },
+    });
   }
 
-  const nextStatus = data.status ?? existingBooking.status;
-
-  const updatedBooking = await prisma.booking.update({
-    where: { id },
-    data: {
-      status: data.status,
-      checkInDate: data.checkInDate ? new Date(data.checkInDate) : undefined,
-      checkOutDate: data.checkOutDate ? new Date(data.checkOutDate) : undefined,
-      guestCount: data.guestCount,
-      notes: data.notes,
-    },
-  });
-
-  if (
-    existingBooking.status !== "CONFIRMED" &&
-    nextStatus === "CONFIRMED"
-  ) {
-    await ensureAccessCodeForBooking(updatedBooking.id);
-  }
-
-  const datesChanged =
-    data.checkInDate !== undefined || data.checkOutDate !== undefined;
-
-  if (datesChanged) {
+  // Business rule: CONFIRMED must NOT auto-generate access codes.
+  // We only sync access windows if an access code already exists.
+  if (datesChanged && updatedBooking.accessCode) {
     await syncAccessCodeWindowForBooking({
       bookingId: updatedBooking.id,
       checkInDate: updatedBooking.checkInDate,
@@ -596,12 +581,12 @@ export async function updateBooking(id: string, data: UpdateBookingInput) {
     });
   }
 
-  if (nextStatus === "CANCELLED") {
+  if (updatedBooking.status === BookingStatus.CANCELLED) {
     await cancelAccessCodeForBooking(updatedBooking.id);
   }
 
   return prisma.booking.findUniqueOrThrow({
-    where: { id: updatedBooking.id },
+    where: { id: updatedBooking.id, organizationId },
     include: {
       unit: {
         include: {
@@ -619,34 +604,6 @@ export function isBookingServiceError(
   return error instanceof BookingServiceError;
 }
 
-// async function ensureAccessCodeForBooking(params: {
-//   bookingId: string;
-//   checkInDate: Date;
-//   checkOutDate: Date;
-// }) {
-//   const existingAccessCode = await prisma.accessCode.findUnique({
-//     where: {
-//       bookingId: params.bookingId,
-//     },
-//     select: {
-//       id: true,
-//     },
-//   });
-
-//   if (existingAccessCode) {
-//     return;
-//   }
-
-//   await prisma.accessCode.create({
-//     data: {
-//       bookingId: params.bookingId,
-//       status: AccessCodeStatus.PENDING,
-//       startsAt: params.checkInDate,
-//       endsAt: params.checkOutDate,
-//     },
-//   });
-// }
-
 export async function ensureAccessCodeForBooking(bookingId: string) {
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
@@ -657,24 +614,19 @@ export async function ensureAccessCodeForBooking(bookingId: string) {
     throw new Error("Booking not found");
   }
 
-  let accessCode = booking.accessCode;
-
-  if (!accessCode) {
-    accessCode = await prisma.accessCode.create({
-      data: {
-        bookingId: booking.id,
-        status: "PENDING",
-        startsAt: booking.checkInDate,
-        endsAt: booking.checkOutDate,
-      },
-    });
+  if (booking.accessCode) {
+    return booking.accessCode;
   }
 
-  if (accessCode.status === "PENDING") {
-    accessCode = await generateAccessCode(accessCode.id);
-  }
-
-  return accessCode;
+  return prisma.accessCode.create({
+    data: {
+      organizationId: booking.organizationId!,
+      bookingId: booking.id,
+      status: "PENDING",
+      startsAt: booking.checkInDate,
+      endsAt: booking.checkOutDate,
+    },
+  });
 }
 
 async function cancelAccessCodeForBooking(bookingId: string) {
@@ -734,9 +686,10 @@ async function syncAccessCodeWindowForBooking(params: {
 }
 
 
-export async function deleteBooking(bookingId: string) {
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
+export async function deleteBooking(params: { organizationId: string; bookingId: string }) {
+  const { organizationId, bookingId } = params;
+  const booking = await prisma.booking.findFirst({
+    where: { id: bookingId, organizationId },
     include: {
       accessCode: true,
     },

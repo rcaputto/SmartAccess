@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { isAuthenticated } from "@/lib/auth";
+import { useSession } from "next-auth/react";
 
 export default function AuthGuard({
   children,
@@ -11,18 +11,17 @@ export default function AuthGuard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { status } = useSession();
 
   useEffect(() => {
-    const isAuth = isAuthenticated();
-
-    if (!isAuth && pathname !== "/login") {
+    if (status === "unauthenticated" && pathname !== "/login") {
       router.push("/login");
     }
 
-    if (isAuth && pathname === "/login") {
+    if (status === "authenticated" && pathname === "/login") {
       router.push("/bookings");
     }
-  }, [pathname, router]);
+  }, [pathname, router, status]);
 
   return <>{children}</>;
 }

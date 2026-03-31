@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
+import { requireAuthContext } from "@/lib/server/auth-context";
 
 export async function GET() {
   try {
+    const { organizationId } = await requireAuthContext();
     const units = await prisma.unit.findMany({
+      where: { organizationId },
       orderBy: {
         createdAt: "desc",
       },

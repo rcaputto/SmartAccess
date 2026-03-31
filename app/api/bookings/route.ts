@@ -5,11 +5,11 @@ import {
   getAllBookings,
   isBookingServiceError,
 } from "@/services/booking.service";
-import { processPreCheckins } from "@/services/access-code.service";
+import { requireAuthContext } from "@/lib/server/auth-context";
 
 export async function GET(request: Request) {
-  await processPreCheckins();
   try {
+    const { organizationId } = await requireAuthContext();
     const { searchParams } = new URL(request.url);
 
     const statusParam = searchParams.get("status");
@@ -18,10 +18,13 @@ export async function GET(request: Request) {
     const to = searchParams.get("to") ?? undefined;
 
     const bookings = await getAllBookings({
-      status: statusParam ? (statusParam as BookingStatus) : undefined,
-      unitId,
-      from,
-      to,
+      organizationId,
+      filters: {
+        status: statusParam ? (statusParam as BookingStatus) : undefined,
+        unitId,
+        from,
+        to,
+      },
     });
 
     return NextResponse.json(bookings);
@@ -44,8 +47,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const { organizationId } = await requireAuthContext();
     const body = await request.json();
-    const booking = await createBooking(body);
+    const booking = await createBooking({ organizationId, input: body });
 
     return NextResponse.json(booking, { status: 201 });
   } catch (error) {

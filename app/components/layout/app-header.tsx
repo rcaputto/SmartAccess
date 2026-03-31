@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { isAuthenticated, logout } from "@/lib/auth";
+import { signOut, useSession } from "next-auth/react";
 
 const navItems = [
   { href: "/bookings", label: "Bookings" },
@@ -13,16 +12,14 @@ const navItems = [
 export default function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
-
-  const [isAuth, setIsAuth] = useState(false);
-
-  useEffect(() => {
-    setIsAuth(isAuthenticated());
-  }, []);
+  const { status } = useSession();
+  const isAuth = status === "authenticated";
 
   function handleLogout() {
-    logout();
-    router.push("/login");
+    signOut({ redirect: false }).finally(() => {
+      router.push("/login");
+      router.refresh();
+    });
   }
 
   return (

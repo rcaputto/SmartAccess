@@ -10,3 +10,5 @@ export function login() {
 export function logout() {
   localStorage.removeItem("auth");
 }
+
+// Deprecated: Sprint 6 migrated to NextAuth sessions.
