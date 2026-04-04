@@ -1,6 +1,7 @@
 import Link from "next/link";
 import BookingsFilters from "../components/bookings/bookings-filters";
 import BookingsTable from "../components/bookings/bookings-table";
+import SectionHeader from "@/app/components/ui/section-header";
 import { serverFetchJson } from "@/lib/server/server-fetch";
 
 type SearchParams = {
@@ -56,35 +57,26 @@ export default async function BookingsPage({
   const activeUnits = units.filter((unit) => unit.isActive);
 
   return (
-    <main className="mx-auto max-w-7xl p-6">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Bookings</h1>
-          <p className="text-sm text-gray-600">
-            Gestión de reservas y códigos de acceso
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/operations"
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Operations
-          </Link>
-
-          <Link
-            href="/bookings/new"
-            className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-          >
-            Nueva reserva
-          </Link>
-        </div>
-      </div>
+    <div className="page-section mx-auto w-full max-w-7xl">
+      <SectionHeader
+        eyebrow="Panel"
+        title="Reservas"
+        subtitle="Listado de reservas, unidades y códigos de acceso."
+        actions={
+          <>
+            <Link href="/operations" className="btn btn-secondary btn-sm">
+              Operaciones
+            </Link>
+            <Link href="/bookings/new" className="btn btn-primary btn-sm">
+              Nueva reserva
+            </Link>
+          </>
+        }
+      />
 
       <BookingsFilters units={activeUnits} />
 
       <BookingsTable bookings={bookings} />
-    </main>
+    </div>
   );
 }

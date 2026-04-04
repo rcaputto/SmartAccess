@@ -1,6 +1,8 @@
 import BookingStatusBadge from "../../components/bookings/booking-status-badge";
 import AccessCodeStatusBadge from "../../components/bookings/access-code-status-badge";
 import BookingActions from "../../components/bookings/booking-actions";
+import SaasCard from "@/app/components/ui/saas-card";
+import SectionHeader from "@/app/components/ui/section-header";
 import Link from "next/link";
 import { serverFetchJson } from "@/lib/server/server-fetch";
 
@@ -107,9 +109,9 @@ function InfoRow({
   value: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[140px_1fr]">
-      <div className="text-sm font-medium text-gray-500">{label}</div>
-      <div className="text-sm text-gray-900">{value}</div>
+    <div className="grid grid-cols-1 gap-1 border-b border-[var(--border)] py-3 last:border-b-0 sm:grid-cols-[minmax(0,160px)_1fr] sm:gap-4">
+      <div className="field-label text-[var(--muted)]">{label}</div>
+      <div className="text-sm font-medium text-slate-900">{value}</div>
     </div>
   );
 }
@@ -142,102 +144,97 @@ export default async function BookingDetailPage({
   const booking = await getBooking(id);
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm text-gray-500">Booking detail</p>
-          <h1 className="text-2xl font-bold">
-            {booking.reference ?? "Sin referencia"}
-          </h1>
-        </div>
+    <div className="page-section mx-auto w-full max-w-5xl">
+      <SectionHeader
+        eyebrow="Detalle de reserva"
+        title={booking.reference ?? "Sin referencia"}
+        subtitle={`Creada el ${formatDate(booking.createdAt)}`}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <BookingStatusBadge status={booking.status} />
+            {booking.accessCode ? (
+              <AccessCodeStatusBadge status={booking.accessCode.status} />
+            ) : (
+              <span className="badge badge-neutral">Sin access code</span>
+            )}
+          </div>
+        }
+      />
 
-        <div className="flex items-center gap-2">
-          <BookingStatusBadge status={booking.status} />
-          {booking.accessCode ? (
-            <AccessCodeStatusBadge status={booking.accessCode.status} />
-          ) : (
-            <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-              No access code
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="mb-4 text-lg font-semibold">Reserva</h2>
-
+      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+        <SaasCard title="Reserva" className="lg:col-span-2">
           <InfoRow label="Referencia" value={booking.reference ?? "Sin referencia"} />
           <InfoRow label="Check-in" value={formatDate(booking.checkInDate)} />
           <InfoRow label="Check-out" value={formatDate(booking.checkOutDate)} />
           <InfoRow label="Estado" value={<BookingStatusBadge status={booking.status} />} />
-          <InfoRow label="Guests" value={booking.guestCount ?? "-"} />
+          <InfoRow label="Huéspedes" value={booking.guestCount ?? "—"} />
           <InfoRow label="Notas" value={booking.notes ?? "Sin notas"} />
           <InfoRow label="Creado" value={formatDate(booking.createdAt)} />
           <InfoRow label="Actualizado" value={formatDate(booking.updatedAt)} />
-        </section>
+        </SaasCard>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
-  <h2 className="mb-4 text-lg font-semibold">Acciones</h2>
-  <Link
-  href={`/bookings/${booking.id}/edit`}
-  className="mb-3 inline-flex w-full items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
->
-  Editar reserva
-</Link>
-  <BookingActions
-    bookingId={booking.id}
-    bookingStatus={booking.status}
-    checkInDate={booking.checkInDate}
-    guestPhone={booking.guest.phone}
-    accessCode={
-      booking.accessCode
-        ? {
-            id: booking.accessCode.id,
-            status: booking.accessCode.status,
-          }
-        : null
-    }
-  />
+        <SaasCard title="Acciones">
+          <Link
+            href={`/bookings/${booking.id}/edit`}
+            className="btn btn-secondary mb-4 w-full"
+          >
+            Editar reserva
+          </Link>
+          <BookingActions
+            bookingId={booking.id}
+            bookingStatus={booking.status}
+            checkInDate={booking.checkInDate}
+            guestPhone={booking.guest.phone}
+            accessCode={
+              booking.accessCode
+                ? {
+                    id: booking.accessCode.id,
+                    status: booking.accessCode.status,
+                  }
+                : null
+            }
+          />
 
-  <p className="mt-3 text-xs text-gray-500">
-    Generate se habilita para access codes en PENDING o FAILED. Send se
-    habilita para GENERATED. Cancel desactiva la reserva y su access code.
-  </p>
-</section>
+          <p className="mt-4 text-xs text-[var(--muted)] leading-relaxed">
+            <strong>Generar</strong> está disponible con access code en PENDING o FAILED.{" "}
+            <strong>Enviar</strong> con estado GENERATED. <strong>Cancelar</strong> anula la reserva y el access code.
+          </p>
+        </SaasCard>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold">Huésped</h2>
-
+        <SaasCard title="Huésped">
           <InfoRow label="Nombre" value={booking.guest.fullName} />
           <InfoRow label="Email" value={booking.guest.email ?? "Sin email"} />
           <InfoRow label="Teléfono" value={booking.guest.phone ?? "Sin teléfono"} />
           <InfoRow label="Documento" value={booking.guest.documentId ?? "Sin documento"} />
-        </section>
+        </SaasCard>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold">Unidad</h2>
-
+        <SaasCard title="Unidad">
           <InfoRow label="Nombre" value={booking.unit.name} />
           <InfoRow label="Descripción" value={booking.unit.description ?? "Sin descripción"} />
-          <InfoRow label="Capacidad" value={booking.unit.maxGuests ?? "-"} />
+          <InfoRow label="Capacidad" value={booking.unit.maxGuests ?? "—"} />
           <InfoRow
             label="Activa"
             value={booking.unit.isActive ? "Sí" : "No"}
           />
-        </section>
+        </SaasCard>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="mb-4 text-lg font-semibold">Propiedad</h2>
-
+        <SaasCard title="Propiedad" className="lg:col-span-2">
           <InfoRow label="Nombre" value={booking.unit.property.name} />
           <InfoRow label="Dirección" value={booking.unit.property.address ?? "Sin dirección"} />
           <InfoRow label="Ciudad" value={booking.unit.property.city ?? "Sin ciudad"} />
           <InfoRow label="País" value={booking.unit.property.country ?? "Sin país"} />
-        </section>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-3">
-          <h2 className="mb-4 text-lg font-semibold">Access Code</h2>
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
+            <Link
+              href={`/finance/${booking.unit.property.id}`}
+              className="text-sm font-semibold text-[var(--primary)] hover:underline"
+            >
+              Ver finanzas de la propiedad
+            </Link>
+          </div>
+        </SaasCard>
+
+        <SaasCard title="Access code" className="lg:col-span-3">
 
           {booking.accessCode ? (
             <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
@@ -246,12 +243,12 @@ export default async function BookingDetailPage({
                 value={<AccessCodeStatusBadge status={booking.accessCode.status} />}
               />
               <InfoRow label="PIN" value={booking.accessCode.code ?? "No generado"} />
-              <InfoRow label="Provider" value={booking.accessCode.provider ?? "Sin provider"} />
-              <InfoRow label="External ID" value={booking.accessCode.externalId ?? "Sin externalId"} />
-              <InfoRow label="Starts at" value={formatDate(booking.accessCode.startsAt)} />
-              <InfoRow label="Ends at" value={formatDate(booking.accessCode.endsAt)} />
+              <InfoRow label="Proveedor" value={booking.accessCode.provider ?? "Sin proveedor"} />
+              <InfoRow label="ID externo" value={booking.accessCode.externalId ?? "—"} />
+              <InfoRow label="Inicio" value={formatDate(booking.accessCode.startsAt)} />
+              <InfoRow label="Fin" value={formatDate(booking.accessCode.endsAt)} />
               <InfoRow
-                label="Last sync"
+                label="Última sincronización"
                 value={
                   booking.accessCode.lastSyncedAt
                     ? formatDate(booking.accessCode.lastSyncedAt)
@@ -264,14 +261,13 @@ export default async function BookingDetailPage({
               />
             </div>
           ) : (
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-[var(--muted)]">
               Esta reserva todavía no tiene access code asociado.
             </p>
           )}
-        </section>
+        </SaasCard>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-3">
-          <h2 className="mb-4 text-lg font-semibold">Delivery Summary</h2>
+        <SaasCard title="Resumen de envíos" className="lg:col-span-3">
 
           {(() => {
             const deliveries = (booking.notificationDeliveries ?? []).filter(
@@ -288,66 +284,54 @@ export default async function BookingDetailPage({
             return (
               <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
                 <InfoRow
-                  label="Access status"
+                  label="Estado del access code"
                   value={
                     booking.accessCode ? (
                       <AccessCodeStatusBadge status={booking.accessCode.status} />
                     ) : (
-                      <span className="text-sm text-gray-700">No creado</span>
+                      <span className="text-sm text-slate-700">No creado</span>
                     )
                   }
                 />
-                <InfoRow label="Latest delivery status" value={lastStatus ?? "-"} />
-                <InfoRow label="Attempts" value={attempts} />
+                <InfoRow label="Último estado de envío" value={lastStatus ?? "—"} />
+                <InfoRow label="Intentos" value={attempts} />
                 <InfoRow
-                  label="Last attempt"
+                  label="Último intento"
                   value={lastAttemptAt ? formatDate(lastAttemptAt) : "Sin intentos"}
                 />
-                <InfoRow label="Last recipient" value={lastRecipient ?? "-"} />
-                <InfoRow label="Last error" value={lastError ?? "-"} />
+                <InfoRow label="Último destinatario" value={lastRecipient ?? "—"} />
+                <InfoRow label="Último error" value={lastError ?? "—"} />
               </div>
             );
           })()}
-        </section>
+        </SaasCard>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-3">
-          <h2 className="mb-4 text-lg font-semibold">Notification History</h2>
-
+        <SaasCard title="Historial de notificaciones" className="lg:col-span-3">
           {booking.notificationDeliveries?.length ? (
-            <div className="overflow-hidden rounded-xl border">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="table-wrap">
+              <table className="table table-striped">
+                <thead>
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Status
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Channel
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Recipient
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      When
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Reason / Error
-                    </th>
+                    <th>Estado</th>
+                    <th>Canal</th>
+                    <th>Destinatario</th>
+                    <th>Fecha</th>
+                    <th>Motivo / error</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
+                <tbody>
                   {booking.notificationDeliveries.map((d) => (
-                    <tr key={d.id} className="align-top">
-                      <td className="px-3 py-2 text-sm">
+                    <tr key={d.id} className="table-row-hover align-top">
+                      <td className="text-sm">
                         <DeliveryStatusPill status={d.status} />
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{d.channel}</td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{d.recipient}</td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
+                      <td className="text-sm text-slate-700">{d.channel}</td>
+                      <td className="text-sm text-slate-700">{d.recipient}</td>
+                      <td className="text-sm text-slate-700">
                         {formatDate(d.createdAt)}
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
-                        {d.errorMessage ?? d.reason ?? "-"}
+                      <td className="text-sm text-slate-700">
+                        {d.errorMessage ?? d.reason ?? "—"}
                       </td>
                     </tr>
                   ))}
@@ -355,47 +339,37 @@ export default async function BookingDetailPage({
               </table>
             </div>
           ) : (
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-[var(--muted)]">
               Todavía no hay registros de envío o intentos.
             </p>
           )}
-        </section>
+        </SaasCard>
 
         {booking.auditLogs?.length ? (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm lg:col-span-3">
-            <h2 className="mb-4 text-lg font-semibold">Audit Trail</h2>
-
-            <div className="overflow-hidden rounded-xl border">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+          <SaasCard title="Historial de auditoría" className="lg:col-span-3">
+            <div className="table-wrap">
+              <table className="table table-striped">
+                <thead>
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      When
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Actor
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Action
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Details
-                    </th>
+                    <th>Fecha</th>
+                    <th>Actor</th>
+                    <th>Acción</th>
+                    <th>Detalle</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
+                <tbody>
                   {booking.auditLogs.map((a) => (
-                    <tr key={a.id} className="align-top">
-                      <td className="px-3 py-2 text-sm text-gray-700">
+                    <tr key={a.id} className="table-row-hover align-top">
+                      <td className="text-sm text-slate-700">
                         {formatDate(a.createdAt)}
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
+                      <td className="text-sm text-slate-700">
                         {a.actorType}
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{a.action}</td>
-                      <td className="px-3 py-2 text-sm text-gray-700">
-                        <pre className="max-w-[720px] overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-2 text-xs text-gray-700">
-                          {a.details ? JSON.stringify(a.details, null, 2) : "-"}
+                      <td className="text-sm text-slate-700">{a.action}</td>
+                      <td className="text-sm text-slate-700">
+                        <pre className="max-w-[720px] overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-2 text-xs text-slate-700">
+                          {a.details ? JSON.stringify(a.details, null, 2) : "—"}
                         </pre>
                       </td>
                     </tr>
@@ -403,9 +377,9 @@ export default async function BookingDetailPage({
                 </tbody>
               </table>
             </div>
-          </section>
+          </SaasCard>
         ) : null}
       </div>
-    </main>
+    </div>
   );
 }

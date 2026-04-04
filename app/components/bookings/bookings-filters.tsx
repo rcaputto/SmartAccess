@@ -47,19 +47,21 @@ export default function BookingsFilters({ units }: BookingsFiltersProps) {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mb-6 rounded-2xl border bg-white p-4 shadow-sm"
-    >
+    <form onSubmit={handleSubmit} className="card mb-8">
+      <div className="card-header">
+        <h2 className="card-title">Filtros</h2>
+        <p className="card-description">Refina la lista por estado, unidad o fechas.</p>
+      </div>
+      <div className="card-content">
       <div className="grid gap-4 md:grid-cols-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+        <div className="field-group">
+          <label className="field-label">
             Estado
           </label>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="w-full rounded-xl border px-3 py-2 text-sm"
+            className="select"
           >
             <option value="">Todos</option>
             <option value="PENDING">PENDING</option>
@@ -70,14 +72,14 @@ export default function BookingsFilters({ units }: BookingsFiltersProps) {
           </select>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+        <div className="field-group">
+          <label className="field-label">
             Unidad
           </label>
           <select
             value={unitId}
             onChange={(e) => setUnitId(e.target.value)}
-            className="w-full rounded-xl border px-3 py-2 text-sm"
+            className="select"
           >
             <option value="">Todas</option>
             {units.map((unit) => (
@@ -88,46 +90,36 @@ export default function BookingsFilters({ units }: BookingsFiltersProps) {
           </select>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Desde
-          </label>
+        <div className="field-group">
+          <label className="field-label">Desde</label>
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="w-full rounded-xl border px-3 py-2 text-sm"
+            className="input"
           />
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Hasta
-          </label>
+        <div className="field-group">
+          <label className="field-label">Hasta</label>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="w-full rounded-xl border px-3 py-2 text-sm"
+            className="input"
           />
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-end gap-3">
-        <button
-          type="button"
-          onClick={handleReset}
-          className="rounded-xl border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
+      <div className="toolbar-actions mt-6 justify-end border-t border-[var(--border)] pt-4">
+        <button type="button" onClick={handleReset} className="btn btn-secondary btn-sm">
           Limpiar
         </button>
 
-        <button
-          type="submit"
-          className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-        >
+        <button type="submit" className="btn btn-primary btn-sm">
           Aplicar filtros
         </button>
+      </div>
       </div>
     </form>
   );

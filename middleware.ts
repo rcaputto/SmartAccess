@@ -28,6 +28,7 @@ export const config = {
   matcher: [
     "/bookings/:path*",
     "/operations/:path*",
+    "/finance/:path*",
     "/api/:path*",
   ],
 };

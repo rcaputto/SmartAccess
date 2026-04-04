@@ -49,20 +49,22 @@ function formatDate(value: string) {
 }
 
 function IssueBadge({ issueType }: { issueType: OperationsCase["issueType"] }) {
+  const label: Record<OperationsCase["issueType"], string> = {
+    MISSING_PHONE: "Falta teléfono",
+    PRECHECKIN_NOT_SENT: "Pre-checkin pendiente",
+    ACCESS_CODE_FAILED: "Access code fallido",
+    GENERATED_NOT_SENT: "Generado sin enviar",
+  };
   const styles: Record<string, string> = {
-    MISSING_PHONE: "bg-amber-50 text-amber-700 ring-amber-100",
-    PRECHECKIN_NOT_SENT: "bg-blue-50 text-blue-700 ring-blue-100",
-    ACCESS_CODE_FAILED: "bg-red-50 text-red-700 ring-red-100",
-    GENERATED_NOT_SENT: "bg-purple-50 text-purple-700 ring-purple-100",
+    MISSING_PHONE: "badge-warning",
+    PRECHECKIN_NOT_SENT: "badge-info",
+    ACCESS_CODE_FAILED: "badge-danger",
+    GENERATED_NOT_SENT: "badge-info",
   };
 
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-        styles[issueType] ?? "bg-gray-50 text-gray-700 ring-gray-100"
-      }`}
-    >
-      {issueType}
+    <span className={`badge ${styles[issueType] ?? "badge-neutral"}`}>
+      {label[issueType] ?? issueType}
     </span>
   );
 }
@@ -112,7 +114,7 @@ export default function OperationsCasesClient({ cases }: { cases: OperationsCase
     } catch (error) {
       showToast({
         type: "error",
-        title: "Generate falló",
+        title: "Error al generar",
         message: error instanceof Error ? error.message : "Error inesperado.",
       });
     } finally {
@@ -153,7 +155,7 @@ export default function OperationsCasesClient({ cases }: { cases: OperationsCase
     } catch (error) {
       showToast({
         type: "error",
-        title: "Send falló",
+        title: "Error al enviar",
         message: error instanceof Error ? error.message : "Error inesperado.",
       });
     } finally {
@@ -162,24 +164,28 @@ export default function OperationsCasesClient({ cases }: { cases: OperationsCase
   }
 
   if (!rows.length) {
-    return <div className="p-6 text-sm text-gray-600">No hay casos operativos.</div>;
+    return (
+      <div className="px-6 py-10 text-center text-sm text-[var(--muted)]">
+        No hay alertas operativas en este momento.
+      </div>
+    );
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead className="bg-gray-50 text-left text-gray-600">
+      <table className="table table-striped min-w-[960px] text-sm">
+        <thead>
           <tr>
-            <th className="px-4 py-3 font-medium">Issue</th>
-            <th className="px-4 py-3 font-medium">Booking</th>
-            <th className="px-4 py-3 font-medium">Huésped</th>
-            <th className="px-4 py-3 font-medium">Unidad</th>
-            <th className="px-4 py-3 font-medium">Check-in</th>
-            <th className="px-4 py-3 font-medium">Access</th>
-            <th className="px-4 py-3 font-medium">Último intento</th>
-            <th className="px-4 py-3 font-medium">Último error</th>
-            <th className="px-4 py-3 font-medium">Mensaje</th>
-            <th className="px-4 py-3 font-medium">Acción</th>
+            <th>Tipo</th>
+            <th>Reserva</th>
+            <th>Huésped</th>
+            <th>Unidad</th>
+            <th>Check-in</th>
+            <th>Access code</th>
+            <th>Último intento</th>
+            <th>Último error</th>
+            <th>Mensaje</th>
+            <th className="text-right">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -188,28 +194,28 @@ export default function OperationsCasesClient({ cases }: { cases: OperationsCase
             const sendKey = `${c.booking.id}:send`;
 
             return (
-              <tr key={`${c.booking.id}-${c.issueType}`} className="border-t align-top">
-                <td className="px-4 py-3">
+              <tr key={`${c.booking.id}-${c.issueType}`} className="table-row-hover align-top">
+                <td>
                   <IssueBadge issueType={c.issueType} />
                 </td>
-                <td className="px-4 py-3 font-medium">
+                <td className="font-semibold text-slate-900">
                   {c.booking.reference ?? "Sin referencia"}
                 </td>
-                <td className="px-4 py-3">
-                  <div className="font-medium">{c.booking.guest.fullName}</div>
-                  <div className="text-xs text-gray-500">
+                <td>
+                  <div className="font-semibold text-slate-900">{c.booking.guest.fullName}</div>
+                  <div className="text-xs text-[var(--muted)]">
                     {c.booking.guest.phone ?? "Sin teléfono"}
                   </div>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="font-medium">{c.booking.unit.name}</div>
-                  <div className="text-xs text-gray-500">{c.booking.unit.property.name}</div>
+                <td>
+                  <div className="font-semibold text-slate-900">{c.booking.unit.name}</div>
+                  <div className="text-xs text-[var(--muted)]">{c.booking.unit.property.name}</div>
                 </td>
-                <td className="px-4 py-3">{formatDate(c.booking.checkInDate)}</td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap text-sm">{formatDate(c.booking.checkInDate)}</td>
+                <td className="text-sm">
                   {c.booking.accessCode ? c.booking.accessCode.status : "No creado"}
                 </td>
-                <td className="px-4 py-3 text-gray-700">
+                <td className="text-slate-700">
                   {c.delivery.lastAttemptAt ? (
                     <div>
                       <div className="font-medium">{formatDate(c.delivery.lastAttemptAt)}</div>
@@ -221,34 +227,34 @@ export default function OperationsCasesClient({ cases }: { cases: OperationsCase
                     <span className="text-xs text-gray-500">Sin intentos</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-gray-700">
+                <td className="text-slate-700">
                   {c.delivery.lastError ? (
-                    <div className="max-w-[260px] break-words text-xs text-gray-700">
+                    <div className="max-w-[260px] break-words text-xs text-slate-700">
                       {c.delivery.lastError}
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-500">-</span>
+                    <span className="text-xs text-[var(--muted)]">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-gray-700">{c.message}</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
+                <td className="max-w-[280px] text-sm text-slate-700">{c.message}</td>
+                <td className="text-right">
+                  <div className="ml-auto flex max-w-[220px] flex-col items-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-3">
                       <Link
                         href={c.actionLinks.openBooking}
-                        className="text-sm font-medium text-blue-600 hover:underline"
+                        className="text-sm font-semibold text-[var(--primary)] hover:underline"
                       >
                         Abrir
                       </Link>
                       <Link
                         href={c.actionLinks.editBooking}
-                        className="text-sm font-medium text-gray-700 hover:underline"
+                        className="text-sm font-semibold text-slate-600 hover:underline"
                       >
                         Editar
                       </Link>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                       <Button
                         type="button"
                         size="sm"
@@ -257,7 +263,7 @@ export default function OperationsCasesClient({ cases }: { cases: OperationsCase
                         disabled={!c.actionState.canGenerate || busyKey !== null}
                         loading={busyKey === genKey}
                       >
-                        Generate
+                        Generar
                       </Button>
 
                       <Button
@@ -268,7 +274,7 @@ export default function OperationsCasesClient({ cases }: { cases: OperationsCase
                         disabled={!c.actionState.canSend || !c.booking.accessCode || busyKey !== null}
                         loading={busyKey === sendKey}
                       >
-                        Send
+                        Enviar
                       </Button>
                     </div>
                   </div>

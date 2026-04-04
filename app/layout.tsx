@@ -1,6 +1,6 @@
 import "./globals.css";
-import AppHeader from "@/app/components/layout/app-header";
 import AuthGuard from "@/app/components/auth/auth-guard";
+import AppShell from "@/app/components/layout/app-shell";
 import Providers from "@/app/providers";
 
 export default function RootLayout({
@@ -9,13 +9,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="es">
       <body>
         <Providers>
           <div className="page-shell">
-            <AppHeader />
             <AuthGuard>
-              <main className="page-container page-content">{children}</main>
+              <AppShell>{children}</AppShell>
             </AuthGuard>
           </div>
         </Providers>

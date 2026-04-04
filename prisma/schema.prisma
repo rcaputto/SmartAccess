@@ -40,6 +40,31 @@ enum AuditActorType {
   MANUAL
 }
 
+enum PropertyFinanceRateType {
+  FIXED
+  VARIABLE
+}
+
+enum MortgageEntryType {
+  PAYMENT
+  EXTRA_PAYMENT
+  BANK_FEE
+  TAX
+  INSURANCE_LINKED
+}
+
+enum PropertyExpenseCategory {
+  INSURANCE
+  CLEANING
+  UTILITIES
+  PROPERTY_TAX
+  MAINTENANCE
+  REPAIRS
+  IMPROVEMENT
+  COMMUNITY_FEES
+  OTHER
+}
+
 enum OrganizationRole {
   OWNER
   MANAGER
@@ -60,6 +85,10 @@ model Organization {
   accessCodes AccessCode[]
   notificationDeliveries NotificationDelivery[]
   auditLogs  AuditLog[]
+
+  financeProfiles   PropertyFinanceProfile[]
+  mortgageEntries   MortgageEntry[]
+  propertyExpenses  PropertyExpense[]
 }
 
 model User {
@@ -93,6 +122,100 @@ model Property {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   units      Unit[]
+
+  financeProfile  PropertyFinanceProfile?
+  mortgageEntries MortgageEntry[]
+  expenses        PropertyExpense[]
+}
+
+model PropertyFinanceProfile {
+  id        String   @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  propertyId String  @unique
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  purchasePrice          Float
+  downPayment            Float
+  purchaseTaxes          Float
+  notaryCosts            Float
+  otherAcquisitionCosts Float
+
+  bankName               String?
+
+  mortgagePrincipal    Float
+  termMonths           Int
+  annualInterestRate   Float
+  rateType             PropertyFinanceRateType
+
+  bonusConditions      String?
+  startDate            DateTime?
+  notes                String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mortgageEntries MortgageEntry[]
+
+  @@index([organizationId])
+  @@index([propertyId])
+}
+
+model MortgageEntry {
+  id        String   @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  financeProfileId String?
+  financeProfile   PropertyFinanceProfile? @relation(fields: [financeProfileId], references: [id], onDelete: SetNull)
+
+  date DateTime
+  type MortgageEntryType
+
+  totalAmount      Float
+  interestAmount   Float
+  principalAmount  Float
+  remainingPrincipal Float
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([propertyId, date])
+  @@index([financeProfileId])
+}
+
+model PropertyExpense {
+  id        String   @id @default(cuid())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  date     DateTime
+  category PropertyExpenseCategory
+
+  amount Float
+  description String?
+  isRecurring Boolean @default(false)
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([propertyId, date])
+  @@index([category])
 }
 
 model Unit {

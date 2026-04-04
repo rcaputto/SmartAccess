@@ -70,41 +70,44 @@ function formatStayDate(value: string) {
 export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
   if (!bookings.length) {
     return (
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <p className="text-sm text-gray-600">No hay reservas cargadas todavía.</p>
+      <div className="card">
+        <div className="card-content">
+          <p className="text-sm text-[var(--muted)]">
+            No hay reservas. Crea una nueva o ajusta los filtros.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
-            <tr>
-              <th className="px-4 py-3 font-medium">Referencia</th>
-              <th className="px-4 py-3 font-medium">Huésped</th>
-              <th className="px-4 py-3 font-medium">Unidad</th>
-              <th className="px-4 py-3 font-medium">Estadía</th>
-              <th className="px-4 py-3 font-medium">Guests</th>
-              <th className="px-4 py-3 font-medium">Booking</th>
-              <th className="px-4 py-3 font-medium">Access</th>
-              <th className="px-4 py-3 font-medium">Acciones</th>
-            </tr>
-          </thead>
+    <div className="table-wrap">
+      <table className="table table-striped">
+        <thead>
+          <tr>
+            <th>Referencia</th>
+            <th>Huésped</th>
+            <th>Unidad</th>
+            <th>Estadía</th>
+            <th className="table-num">Huéspedes</th>
+            <th>Estado</th>
+            <th>Access code</th>
+            <th className="text-right">Acciones</th>
+          </tr>
+        </thead>
 
-          <tbody>
+        <tbody>
             {bookings.map((booking) => (
-              <tr key={booking.id} className="border-t align-top">
-                <td className="px-4 py-3 font-medium">
+              <tr key={booking.id} className="table-row-hover align-top">
+                <td className="font-semibold text-slate-900">
                   <div className="max-w-[170px] break-words">
                     {booking.reference ?? "Sin referencia"}
                   </div>
                 </td>
 
-                <td className="px-4 py-3">
+                <td>
                   <div className="max-w-[200px]">
-                    <div className="font-medium">{booking.guest.fullName}</div>
+                    <div className="font-semibold text-slate-900">{booking.guest.fullName}</div>
                     <div className="truncate text-xs text-gray-500">
                       {booking.guest.email || "Sin email"}
                     </div>
@@ -114,9 +117,9 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
                   </div>
                 </td>
 
-                <td className="px-4 py-3">
+                <td>
                   <div className="max-w-[200px]">
-                    <div className="font-medium">{booking.unit.name}</div>
+                    <div className="font-semibold text-slate-900">{booking.unit.name}</div>
                     <div className="text-xs text-gray-500">
                       {booking.unit.property.name}
                     </div>
@@ -130,9 +133,9 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
                   </div>
                 </td>
 
-                <td className="px-4 py-3">
+                <td>
                   <div className="min-w-[130px]">
-                    <div className="font-medium">
+                    <div className="font-semibold text-slate-900">
                       {formatStayDate(booking.checkInDate)}
                     </div>
                     <div className="text-xs text-gray-500">
@@ -141,13 +144,13 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
                   </div>
                 </td>
 
-                <td className="px-4 py-3">{booking.guestCount ?? "-"}</td>
+                <td className="table-num text-slate-900">{booking.guestCount ?? "—"}</td>
 
-                <td className="px-4 py-3">
+                <td>
                   <BookingStatusBadge status={booking.status} />
                 </td>
 
-                <td className="px-4 py-3">
+                <td>
                   {booking.accessCode ? (
                     <div className="space-y-1">
                       <AccessCodeStatusBadge status={booking.accessCode.status} />
@@ -157,8 +160,8 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
                   )}
                 </td>
 
-                <td className="px-4 py-3">
-                  <div className="flex min-w-[140px] flex-col gap-3">
+                <td className="text-right">
+                  <div className="ml-auto flex min-w-[140px] max-w-[200px] flex-col items-end gap-3">
                     <BookingRowActions
                       bookingId={booking.id}
                       bookingStatus={booking.status}
@@ -176,7 +179,7 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
 
                     <Link
                       href={`/bookings/${booking.id}`}
-                      className="text-sm font-medium text-blue-600 hover:underline"
+                      className="text-sm font-semibold text-[var(--primary)] hover:underline"
                     >
                       Ver detalle
                     </Link>
@@ -184,9 +187,8 @@ export default function BookingsTable({ bookings }: { bookings: Booking[] }) {
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import SectionHeader from "@/app/components/ui/section-header";
+import StatBlock from "@/app/components/ui/stat-block";
 import { serverFetchJson } from "@/lib/server/server-fetch";
 import OperationsCasesClient from "./operations-cases-client";
 
@@ -56,25 +58,6 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function IssueBadge({ issueType }: { issueType: OperationsCase["issueType"] }) {
-  const styles: Record<string, string> = {
-    MISSING_PHONE: "bg-amber-50 text-amber-700 ring-amber-100",
-    PRECHECKIN_NOT_SENT: "bg-blue-50 text-blue-700 ring-blue-100",
-    ACCESS_CODE_FAILED: "bg-red-50 text-red-700 ring-red-100",
-    GENERATED_NOT_SENT: "bg-purple-50 text-purple-700 ring-purple-100",
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-        styles[issueType] ?? "bg-gray-50 text-gray-700 ring-gray-100"
-      }`}
-    >
-      {issueType}
-    </span>
-  );
-}
-
 async function getSummary(): Promise<OperationsSummary> {
   return serverFetchJson<OperationsSummary>("/api/operations/summary");
 }
@@ -87,75 +70,55 @@ export default async function OperationsPage() {
   const [summary, cases] = await Promise.all([getSummary(), getCases()]);
 
   return (
-    <main className="mx-auto max-w-7xl p-6">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Operations</h1>
-          <p className="text-sm text-gray-600">
-            Alertas operativas y reservas que requieren acción.
+    <div className="page-section mx-auto w-full max-w-7xl">
+      <SectionHeader
+        eyebrow="Panel operativo"
+        title="Operaciones"
+        subtitle="Alertas y reservas que requieren acción en las próximas 24 horas."
+        actions={
+          <Link href="/bookings" className="btn btn-secondary btn-sm">
+            Ver reservas
+          </Link>
+        }
+      />
+
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatBlock
+          label="Check-ins (24h)"
+          value={summary.checkingInNext24h}
+          hint="Reservas confirmadas con entrada próxima"
+        />
+        <StatBlock
+          label="Sin envío SENT (24h)"
+          value={summary.withoutSentAccessCodeInWindow}
+        />
+        <StatBlock
+          label="Sin teléfono (24h)"
+          value={summary.missingPhoneInWindow}
+        />
+        <StatBlock
+          label="Generado sin enviar"
+          value={summary.generatedNotSentInWindow}
+        />
+        <StatBlock
+          label="Access codes en error"
+          value={summary.failedAccessCodes}
+          tone="danger"
+        />
+      </div>
+
+      <div className="card mt-8">
+        <div className="card-header">
+          <h2 className="card-title">Requiere atención</h2>
+          <p className="card-description">
+            Ventana: {formatDate(summary.now)} → {formatDate(summary.next24h)}
           </p>
         </div>
-
-        <Link
-          href="/bookings"
-          className="rounded-xl border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Ver bookings
-        </Link>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-5">
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs font-medium uppercase text-gray-500">
-            Check-ins 24h
-          </div>
-          <div className="mt-2 text-2xl font-bold">{summary.checkingInNext24h}</div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs font-medium uppercase text-gray-500">
-            Sin SENT (24h)
-          </div>
-          <div className="mt-2 text-2xl font-bold">
-            {summary.withoutSentAccessCodeInWindow}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs font-medium uppercase text-gray-500">
-            Falta teléfono (24h)
-          </div>
-          <div className="mt-2 text-2xl font-bold">{summary.missingPhoneInWindow}</div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs font-medium uppercase text-gray-500">
-            GENERATED no enviado
-          </div>
-          <div className="mt-2 text-2xl font-bold">
-            {summary.generatedNotSentInWindow}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs font-medium uppercase text-gray-500">
-            Access FAILED
-          </div>
-          <div className="mt-2 text-2xl font-bold">{summary.failedAccessCodes}</div>
+        <div className="p-0">
+          <OperationsCasesClient cases={cases} />
         </div>
       </div>
-
-      <div className="mt-6 overflow-hidden rounded-2xl border bg-white shadow-sm">
-        <div className="border-b p-4">
-          <div className="font-semibold">Needs attention</div>
-          <div className="text-xs text-gray-500">
-            Ventana evaluada: {formatDate(summary.now)} → {formatDate(summary.next24h)}
-          </div>
-        </div>
-
-        <OperationsCasesClient cases={cases} />
-      </div>
-    </main>
+    </div>
   );
 }
 
